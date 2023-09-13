@@ -9,7 +9,6 @@ def get_s3_objects(bucket, prefix=''):
     next_token = None
     if prefix:
         kwargs['Prefix'] = prefix
-    object_list = []
     while True:
         if next_token:
             kwargs['ContinuationToken'] = next_token
@@ -18,19 +17,28 @@ def get_s3_objects(bucket, prefix=''):
         for obj in contents:
             key = obj['Key']
             if key.startswith(prefix):
-                object_list.append(obj)
+                yield obj
         next_token = resp.get('NextContinuationToken', None)
 
         if not next_token:
             break
-    return object_list
 
 """
 Please, full explain this function: document iterations, conditionals, and the
 function as a whole
 """
 def fn(main_plan, obj, extensions=[]):
-    
+
+    # From the extensions array, we are creating a dictionary with the price id as key and the quantity as value.
+    # For each item in the cart, we want to check if the item price is in the main plan or in the extensions.
+    # If the item does not exist in the main plan or in the extensions, the item is labeled as deleted.
+    # If the item exists in the extensions, we check if the quantity is less than 1, if so, the item is labeled as deleted, otherwise
+    # the item is labeled with the quantity.
+    # When the item is in the main plan, we set the sp flag to True, so we know that the main plan is in the cart.
+    # After we check the item, we remove the item from the extensions dictionary, so we know that the item was already checked.
+    # Finally, if no main plan was found in the cart, we add the main plan to the cart with a quantity of 1. The purpose of this is to make sure that the main plan is always in the cart.
+    # Then we proceed to add the rest of the items in the extensions dictionary to the cart with their respective quantities.
+
     items = []
     sp = False
     cd = False
@@ -90,18 +98,7 @@ class Caller:
     multiply = lambda a, b : a * b
 
 def fn(fn_to_call, *args):
-    result = None
-
-    if fn_to_call == 'add':
-        result = Caller.add(*args)
-    if fn_to_call == 'concat':
-        result = Caller.concat(*args)
-    if fn_to_call == 'divide':
-        result = Caller.divide(*args)
-    if fn_to_call == 'multiply':
-        result = Caller.multiply(*args)
-
-    return result
+    return getattr(Caller, fn_to_call)(*args)
 
 
 """
@@ -110,6 +107,20 @@ encoded with a given configuration done by this function. Can you explain what t
 and returning based in its conditionals?
 """
 def fn(config, w, h):
+    """
+    Based on the width and height, this function is calculating the aspect ration of the video (as).
+
+    When the aspect ratio is less than 1, this means the video is in portrait orientation. For that
+    reason makes sense to me that the preset choosen is 'p'.
+
+    When the aspect ratio is bigger than than 1, but less than 4/3, this means the video is in widescreen format (e.g. HD (1280x720)).
+    Makes sense that the preset choosen is 'l' (for large).
+
+    Aspect ratios greater than 4/3 means the video is too wide, so we opted for a smaller preset 's'.
+
+    Then the function returns the proper array of presets.
+
+    """
     v = None
     ar = w / h
 
@@ -140,57 +151,38 @@ class Helper:
         'refresh_token': None
     }
 
-        
+    def _request(self, endpoint, method, **kwargs):
+        token_type = self.AUTHORIZATION_TOKEN['token_type']
+        access_token = self.AUTHORIZATION_TOKEN['access_token']
+
+        headers = {
+            'Authorization': f'{token_type} {access_token}',
+        }
+
+        URL = f'{self.DOMAIN}/{endpoint}'
+
+        send = {
+            'headers': headers,
+            **kwargs
+        }
+
+        request_method = getattr(requests, method, None)
+
+        if request_method:
+            response = request_method(URL, **send)
+        else:
+            raise ValueError("Unsupported HTTP method")
+
+        return response
+
     def search_images(self, **kwargs):
-        token_type = self.AUTHORIZATION_TOKEN['token_type']
-        access_token = self.AUTHORIZATION_TOKEN['access_token']
+        return self._request(self.SEARCH_IMAGES_ENDPOINT, method='get', params=kwargs)
 
-        headers = {
-            'Authorization': f'{token_type} {access_token}',
-        }
-
-        URL = f'{self.DOMAIN}/{self.SEARCH_IMAGES_ENDPOINT}'
-
-        send = {
-            'headers': headers,
-            'params': kwargs
-        }
-
-        response = request.get(requests, method)(URL, **send)
-        return response
-        
     def get_image(self, image_id, **kwargs):
-        token_type = self.AUTHORIZATION_TOKEN['token_type']
-        access_token = self.AUTHORIZATION_TOKEN['access_token']
-
-        headers = {
-            'Authorization': f'{token_type} {access_token}',
-        }
-
-        URL = f'{self.DOMAIN}/{self.GET_IMAGE_ENDPOINT}/{image_id}'
-
-        send = {
-            'headers': headers,
-            'params': kwargs
-        }
-
-        response = request.get(requests, method)(URL, **send)
-        return response
+        endpoint = f'{self.GET_IMAGE_ENDPOINT}/{image_id}'
+        return self._request(endpoint, method='get', params=kwargs)
 
     def download_image(self, image_id, **kwargs):
-        token_type = self.AUTHORIZATION_TOKEN['token_type']
-        access_token = self.AUTHORIZATION_TOKEN['access_token']
+        endpoint = f'{self.DOWNLOAD_IMAGE_ENDPOINT}/{image_id}'
+        return self._request(endpoint, method='post', data=kwargs)
 
-        headers = {
-            'Authorization': f'{token_type} {access_token}',
-        }
-
-        URL = f'{self.DOMAIN}/{self.DOWNLOAD_IMAGE_ENDPOINT}/{image_id}'
-
-        send = {
-            'headers': headers,
-            'data': kwargs
-        }
-
-        response = request.post(requests, method)(URL, **send)
-        return response
